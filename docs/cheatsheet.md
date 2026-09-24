@@ -11,3 +11,7 @@ gcloud compute ssh dev-workstation --zone=asia-south1-a
 
 ## Terraform state bucket
 GCS state bucket: devops-learning-505512-tfstate
+
+## FleetPulse Terraform state buckets
+Staging:    devops-learning-505512-fleetpulse-staging-tfstate
+Production: devops-learning-505512-fleetpulse-production-tfstate

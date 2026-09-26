@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>FleetPulse Dashboard</title>
+  <style>
+    body { font-family: sans-serif; background: #f5f5f5; padding: 20px; }
+    .cards { display: flex; gap: 15px; margin-bottom: 20px; }
+    .card { background: white; padding: 15px 25px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .card h2 { margin: 0; font-size: 28px; }
+    .card p { margin: 5px 0 0; color: #666; }
+    table { width: 100%; background: white; border-collapse: collapse; border-radius: 8px; overflow: hidden; }
+    th, td { text-align: left; padding: 10px 15px; border-bottom: 1px solid #eee; }
+    th { background: #333; color: white; }
+  </style>
+</head>
+<body>
+  <h1>FleetPulse Dashboard</h1>
+
+  <div class="cards" id="summary-cards">
+    <div class="card"><h2 id="total">--</h2><p>Total Equipment</p></div>
+    <div class="card"><h2 id="charging">--</h2><p>Charging</p></div>
+    <div class="card"><h2 id="in_use">--</h2><p>In Use</p></div>
+    <div class="card"><h2 id="idle">--</h2><p>Idle</p></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Name</th><th>Status</th><th>SOC (%)</th></tr>
+    </thead>
+    <tbody id="equipment-rows"></tbody>
+  </table>
+
+  <script>
+    const API_URL = "http://localhost:8000";
+
+    async function loadDashboard() {
+      const summary = await fetch(API_URL + "/summary").then(r => r.json());
+      document.getElementById("total").innerText = summary.total;
+      document.getElementById("charging").innerText = summary.charging;
+      document.getElementById("in_use").innerText = summary.in_use;
+      document.getElementById("idle").innerText = summary.idle;
+
+      const equipment = await fetch(API_URL + "/equipment").then(r => r.json());
+      const rows = equipment.map(e =>
+        `<tr><td>${e.id}</td><td>${e.name}</td><td>${e.status}</td><td>${e.soc}</td></tr>`
+      ).join("");
+      document.getElementById("equipment-rows").innerHTML = rows;
+    }
+
+    loadDashboard();
+  </script>
+</body>
+</html>

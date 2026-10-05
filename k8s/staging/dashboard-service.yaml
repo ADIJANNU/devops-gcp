@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleetpulse-dashboard
+spec:
+  selector:
+    app: fleetpulse-dashboard
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP

@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fleetpulse-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fleetpulse-api
+  template:
+    metadata:
+      labels:
+        app: fleetpulse-api
+    spec:
+      containers:
+        - name: api
+          image: asia-south1-docker.pkg.dev/devops-learning-505512/fleetpulse-staging-images/api:v1
+          ports:
+            - containerPort: 8000

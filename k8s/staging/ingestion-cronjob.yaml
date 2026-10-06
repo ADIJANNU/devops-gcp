@@ -1,0 +1,15 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fleetpulse-ingestion
+spec:
+  schedule: "*/5 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: ingestion
+              image: asia-south1-docker.pkg.dev/devops-learning-505512/fleetpulse-staging-images/ingestion:v1
+          restartPolicy: Never
+      backoffLimit: 3

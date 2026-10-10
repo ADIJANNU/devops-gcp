@@ -3,15 +3,25 @@ kind: CronJob
 metadata:
   name: fleetpulse-ingestion
 spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
-  schedule: "*/5 * * * *"
   jobTemplate:
     spec:
+      backoffLimit: 3
       template:
         spec:
+          restartPolicy: Never
           containers:
             - name: ingestion
-              image: asia-south1-docker.pkg.dev/devops-learning-505512/fleetpulse-staging-images/ingestion:v1
-          restartPolicy: Never
-      backoffLimit: 3
+              image: asia-south1-docker.pkg.dev/devops-learning-505512/fleetpulse-staging-images/ingestion:TAG_PLACEHOLDER
+              envFrom:
+                - secretRef:
+                    name: ingestion-db-credentials
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  memory: 256Mi

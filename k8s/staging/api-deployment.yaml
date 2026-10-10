@@ -14,6 +14,30 @@ spec:
     spec:
       containers:
         - name: api
-          image: asia-south1-docker.pkg.dev/devops-learning-505512/fleetpulse-staging-images/api:v1
+          image: asia-south1-docker.pkg.dev/devops-learning-505512/fleetpulse-staging-images/api:TAG_PLACEHOLDER
           ports:
             - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: api-db-credentials
+          env:
+            - name: COMPANY_ID
+              value: "1"
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi

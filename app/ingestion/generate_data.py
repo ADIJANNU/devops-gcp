@@ -1,19 +1,30 @@
+import os
 import random
-from datetime import datetime
 
-# Same equipment list as the API service, for now (real DB sync comes later)
-equipment_ids = ["FBP-1174", "FBP-1175", "FBP-1176", "FBP-1177"]
+import psycopg2
 
-def generate_reading(equipment_id):
-    return {
-        "equipment_id": equipment_id,
-        "soc": random.randint(10, 100),          # State of Charge %
-        "temperature": round(random.uniform(20, 45), 1),
-        "status": random.choice(["charging", "in_use", "idle"]),
-        "timestamp": datetime.utcnow().isoformat()
-    }
+conn = psycopg2.connect(
+    host=os.environ["DB_HOST"],
+    dbname=os.environ["DB_NAME"],
+    user=os.environ["DB_USER"],
+    password=os.environ["DB_PASSWORD"],
+    connect_timeout=5,
+)
 
-if __name__ == "__main__":
-    for eq_id in equipment_ids:
-        reading = generate_reading(eq_id)
-        print(reading)
+with conn, conn.cursor() as cur:
+    cur.execute("SELECT id, equipment_code FROM equipment ORDER BY id")
+    rows = cur.fetchall()
+    for equipment_id, code in rows:
+        cur.execute(
+            "INSERT INTO readings (equipment_id, soc, temperature, status) "
+            "VALUES (%s, %s, %s, %s)",
+            (
+                equipment_id,
+                random.randint(10, 100),
+                round(random.uniform(20, 45), 1),
+                random.choice(["charging", "in_use", "idle"]),
+            ),
+        )
+    print(f"inserted {len(rows)} readings")
+
+conn.close()

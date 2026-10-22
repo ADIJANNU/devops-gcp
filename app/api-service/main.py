@@ -80,12 +80,12 @@ def readyz():
     return {"status": "ready"}
 
 
-@app.get("/equipment")
+@app.get("/api/equipment")
 def list_equipment():
     return latest_equipment()
 
 
-@app.get("/summary")
+@app.get("/api/summary")
 def summary():
     rows = latest_equipment()
     counts = {"charging": 0, "in_use": 0, "idle": 0, "no_data": 0}
@@ -98,7 +98,7 @@ def summary():
     }
 
 
-@app.get("/equipment/{code}/history")
+@app.get("/api/equipment/{code}/history")
 def history(code: str, hours: int = Query(24, ge=1, le=720)):
     with db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(

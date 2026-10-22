@@ -26,9 +26,9 @@ check() {
 
 check /healthz 200
 check /readyz 200
-check /summary 200
-check /equipment 200
-check /equipment/NOPE/history 404
+check /api/summary 200
+check /api/equipment 200
+check /api/equipment/NOPE/history 404
 
 if [[ $FAILED -eq 0 ]]; then
   echo "All checks passed"

@@ -14,6 +14,24 @@ spec:
     spec:
       containers:
         - name: dashboard
-          image: asia-south1-docker.pkg.dev/devops-learning-505512/fleetpulse-staging-images/dashboard:v1
+          image: asia-south1-docker.pkg.dev/devops-learning-505512/fleetpulse-staging-images/dashboard:TAG_PLACEHOLDER
           ports:
             - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi

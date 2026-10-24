@@ -1,29 +1,27 @@
 import os
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+import bcrypt
+import jwt
 import psycopg2
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from psycopg2.extras import RealDictCursor
+from pydantic import BaseModel
 
 DB_HOST = os.environ["DB_HOST"]
 DB_NAME = os.environ["DB_NAME"]
 DB_USER = os.environ["DB_USER"]
 DB_PASSWORD = os.environ["DB_PASSWORD"]
-
-# TEMPORARY PLACEHOLDER: replaced by the company_id inside the login token
-# when we build authentication. Never accept this from the request itself.
-COMPANY_ID = int(os.environ["COMPANY_ID"])
+JWT_SECRET = os.environ["JWT_SECRET"]
+JWT_ALGORITHM = "HS256"
+TOKEN_HOURS = 8
 
 app = FastAPI(title="FleetPulse API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+bearer = HTTPBearer(auto_error=False)
+# Used when the email doesn't exist, so response time doesn't reveal valid emails.
+DUMMY_HASH = bcrypt.hashpw(b"dummy", bcrypt.gensalt(12))
 
 
 @contextmanager
@@ -36,6 +34,33 @@ def db():
         yield conn
     finally:
         conn.close()
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+def current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)):
+    if creds is None:
+        raise HTTPException(status_code=401, detail="not authenticated")
+    try:
+        # algorithms is pinned on purpose: never let the token choose its own.
+        return jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="invalid or expired token")
+
+
+def tenant_user(user=Depends(current_user)):
+    if user.get("company_id") is None:
+        raise HTTPException(status_code=403, detail="no company data for this role")
+    return user
+
+
+def platform_admin(user=Depends(current_user)):
+    if user.get("role") != "platform_admin":
+        raise HTTPException(status_code=403, detail="admin only")
+    return user
 
 
 LATEST_SQL = """
@@ -54,9 +79,9 @@ ORDER BY e.equipment_code
 """
 
 
-def latest_equipment():
+def latest_equipment(company_id):
     with db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(LATEST_SQL, (COMPANY_ID,))
+        cur.execute(LATEST_SQL, (company_id,))
         return cur.fetchall()
 
 
@@ -80,14 +105,38 @@ def readyz():
     return {"status": "ready"}
 
 
+@app.post("/api/login")
+def login(body: LoginRequest):
+    with db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            "SELECT id, company_id, password_hash, role FROM users WHERE email = %s",
+            (body.email.strip().lower(),),
+        )
+        user = cur.fetchone()
+    stored = user["password_hash"].encode() if user else DUMMY_HASH
+    password_ok = bcrypt.checkpw(body.password.encode(), stored)
+    if user is None or not password_ok:
+        raise HTTPException(status_code=401, detail="invalid credentials")
+    claims = {
+        "sub": str(user["id"]),
+        "company_id": user["company_id"],
+        "role": user["role"],
+        "exp": datetime.now(timezone.utc) + timedelta(hours=TOKEN_HOURS),
+    }
+    return {
+        "access_token": jwt.encode(claims, JWT_SECRET, algorithm=JWT_ALGORITHM),
+        "token_type": "bearer",
+    }
+
+
 @app.get("/api/equipment")
-def list_equipment():
-    return latest_equipment()
+def list_equipment(user=Depends(tenant_user)):
+    return latest_equipment(user["company_id"])
 
 
 @app.get("/api/summary")
-def summary():
-    rows = latest_equipment()
+def summary(user=Depends(tenant_user)):
+    rows = latest_equipment(user["company_id"])
     counts = {"charging": 0, "in_use": 0, "idle": 0, "no_data": 0}
     for row in rows:
         counts[row["status"] or "no_data"] += 1
@@ -99,11 +148,12 @@ def summary():
 
 
 @app.get("/api/equipment/{code}/history")
-def history(code: str, hours: int = Query(24, ge=1, le=720)):
+def history(code: str, hours: int = Query(24, ge=1, le=720), user=Depends(tenant_user)):
+    company_id = user["company_id"]
     with db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             "SELECT id FROM equipment WHERE equipment_code = %s AND company_id = %s",
-            (code, COMPANY_ID),
+            (code, company_id),
         )
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="equipment not found")
@@ -117,6 +167,17 @@ def history(code: str, hours: int = Query(24, ge=1, le=720)):
             ORDER BY r.recorded_at DESC
             LIMIT 1000
             """,
-            (code, COMPANY_ID, hours),
+            (code, company_id, hours),
+        )
+        return cur.fetchall()
+
+
+@app.get("/api/admin/companies")
+def admin_companies(user=Depends(platform_admin)):
+    with db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            "SELECT c.id, c.name, count(e.id) AS equipment_count "
+            "FROM companies c LEFT JOIN equipment e ON e.company_id = c.id "
+            "GROUP BY c.id ORDER BY c.id"
         )
         return cur.fetchall()

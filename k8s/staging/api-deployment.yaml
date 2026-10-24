@@ -20,9 +20,8 @@ spec:
           envFrom:
             - secretRef:
                 name: api-db-credentials
-          env:
-            - name: COMPANY_ID
-              value: "1"
+            - secretRef:
+                name: api-auth-secret
           readinessProbe:
             httpGet:
               path: /readyz

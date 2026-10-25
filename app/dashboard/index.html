@@ -139,7 +139,8 @@
     $("login-btn").addEventListener("click", login);
     $("password").addEventListener("keydown", (ev) => { if (ev.key === "Enter") login(); });
     $("logout-btn").addEventListener("click", () => showLogin(""));
-    setInterval(() => { if (sessionStorage.getItem(TOKEN_KEY)) load(); }, 30000);
+    // Refresh every 60s: readings only arrive every 5 minutes, so faster polling adds load without new data.
+    setInterval(() => { if (sessionStorage.getItem(TOKEN_KEY)) load(); }, 60000);
     load();
   </script>
 </body>

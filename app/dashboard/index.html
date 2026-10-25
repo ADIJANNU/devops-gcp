@@ -2,52 +2,146 @@
 <html>
 <head>
   <title>FleetPulse Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body { font-family: sans-serif; background: #f5f5f5; padding: 20px; }
-    .cards { display: flex; gap: 15px; margin-bottom: 20px; }
+    .panel { background: white; padding: 20px; border-radius: 8px; max-width: 360px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .panel input { display: block; width: 100%; box-sizing: border-box; margin: 8px 0; padding: 8px; }
+    .error { color: #b00020; min-height: 1.2em; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    .cards { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
     .card { background: white; padding: 15px 25px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .card h2 { margin: 0; font-size: 28px; }
     .card p { margin: 5px 0 0; color: #666; }
     table { width: 100%; background: white; border-collapse: collapse; border-radius: 8px; overflow: hidden; }
     th, td { text-align: left; padding: 10px 15px; border-bottom: 1px solid #eee; }
     th { background: #333; color: white; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
   <h1>FleetPulse Dashboard</h1>
 
-  <div class="cards" id="summary-cards">
-    <div class="card"><h2 id="total">--</h2><p>Total Equipment</p></div>
-    <div class="card"><h2 id="charging">--</h2><p>Charging</p></div>
-    <div class="card"><h2 id="in_use">--</h2><p>In Use</p></div>
-    <div class="card"><h2 id="idle">--</h2><p>Idle</p></div>
+  <div id="login-box" class="panel" hidden>
+    <h2>Sign in</h2>
+    <input id="email" type="email" placeholder="Email" autocomplete="username">
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="login-btn">Sign in</button>
+    <p id="login-error" class="error"></p>
   </div>
 
-  <table>
-    <thead>
-      <tr><th>ID</th><th>Name</th><th>Status</th><th>SOC (%)</th></tr>
-    </thead>
-    <tbody id="equipment-rows"></tbody>
-  </table>
+  <div id="app" hidden>
+    <div class="topbar"><span id="who"></span><button id="logout-btn">Sign out</button></div>
+
+    <div id="tenant-view" hidden>
+      <div class="cards">
+        <div class="card"><h2 id="total">--</h2><p>Total Equipment</p></div>
+        <div class="card"><h2 id="charging">--</h2><p>Charging</p></div>
+        <div class="card"><h2 id="in_use">--</h2><p>In Use</p></div>
+        <div class="card"><h2 id="idle">--</h2><p>Idle</p></div>
+        <div class="card"><h2 id="no_data">--</h2><p>No data</p></div>
+      </div>
+      <table>
+        <thead><tr><th>ID</th><th>Name</th><th>Status</th><th>SOC (%)</th><th>Temp (C)</th></tr></thead>
+        <tbody id="equipment-rows"></tbody>
+      </table>
+    </div>
+
+    <div id="admin-view" hidden>
+      <h2>Companies</h2>
+      <table>
+        <thead><tr><th>ID</th><th>Name</th><th>Equipment</th></tr></thead>
+        <tbody id="company-rows"></tbody>
+      </table>
+    </div>
+  </div>
 
   <script>
     const API_URL = "/api";
+    const TOKEN_KEY = "fp_token";
+    const $ = (id) => document.getElementById(id);
 
-    async function loadDashboard() {
-      const summary = await fetch(API_URL + "/summary").then(r => r.json());
-      document.getElementById("total").innerText = summary.total;
-      document.getElementById("charging").innerText = summary.charging;
-      document.getElementById("in_use").innerText = summary.in_use;
-      document.getElementById("idle").innerText = summary.idle;
-
-      const equipment = await fetch(API_URL + "/equipment").then(r => r.json());
-      const rows = equipment.map(e =>
-        `<tr><td>${e.id}</td><td>${e.name}</td><td>${e.status}</td><td>${e.soc}</td></tr>`
-      ).join("");
-      document.getElementById("equipment-rows").innerHTML = rows;
+    function roleFromToken(token) {
+      try {
+        const body = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+        return JSON.parse(atob(body)).role;   // display only; the API enforces access
+      } catch (e) { return "unknown"; }
     }
 
-    loadDashboard();
+    function fillRows(tbodyId, rows, fields) {
+      const tbody = $(tbodyId);
+      tbody.replaceChildren();
+      for (const row of rows) {
+        const tr = document.createElement("tr");
+        for (const f of fields) {
+          const td = document.createElement("td");
+          td.textContent = row[f] ?? "";      // textContent, never innerHTML, for data from the API
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+    }
+
+    function showLogin(message) {
+      sessionStorage.removeItem(TOKEN_KEY);
+      $("app").hidden = true;
+      $("login-box").hidden = false;
+      $("login-error").textContent = message || "";
+    }
+
+    async function apiGet(path) {
+      const res = await fetch(API_URL + path, {
+        headers: { Authorization: "Bearer " + sessionStorage.getItem(TOKEN_KEY) }
+      });
+      if (res.status === 401) { showLogin("Session expired, please sign in again."); return null; }
+      return res;
+    }
+
+    async function load() {
+      const token = sessionStorage.getItem(TOKEN_KEY);
+      if (!token) { showLogin(""); return; }
+      $("login-box").hidden = true;
+      $("app").hidden = false;
+      const role = roleFromToken(token);
+      $("who").textContent = "Signed in as " + role;
+
+      if (role === "platform_admin") {
+        $("tenant-view").hidden = true;
+        $("admin-view").hidden = false;
+        const res = await apiGet("/admin/companies");
+        if (res && res.ok) fillRows("company-rows", await res.json(), ["id", "name", "equipment_count"]);
+        return;
+      }
+
+      $("admin-view").hidden = true;
+      $("tenant-view").hidden = false;
+      const s = await apiGet("/summary");
+      if (!s || !s.ok) return;
+      const summary = await s.json();
+      for (const k of ["total", "charging", "in_use", "idle", "no_data"]) $(k).textContent = summary[k];
+      const e = await apiGet("/equipment");
+      if (e && e.ok) fillRows("equipment-rows", await e.json(), ["id", "name", "status", "soc", "temperature"]);
+    }
+
+    async function login() {
+      $("login-error").textContent = "";
+      const res = await fetch(API_URL + "/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: $("email").value, password: $("password").value })
+      });
+      $("password").value = "";
+      if (!res.ok) { $("login-error").textContent = "Invalid email or password."; return; }
+      sessionStorage.setItem(TOKEN_KEY, (await res.json()).access_token);
+      load();
+    }
+
+    $("login-btn").addEventListener("click", login);
+    $("password").addEventListener("keydown", (ev) => { if (ev.key === "Enter") login(); });
+    $("logout-btn").addEventListener("click", () => showLogin(""));
+    // Refresh every 60s: readings only arrive every 5 minutes, so faster polling adds load without new data.
+    setInterval(() => { if (sessionStorage.getItem(TOKEN_KEY)) load(); }, 60000);
+    load();
   </script>
 </body>
 </html>

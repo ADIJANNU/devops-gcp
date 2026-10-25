@@ -16,7 +16,7 @@ DB_USER = os.environ["DB_USER"]
 DB_PASSWORD = os.environ["DB_PASSWORD"]
 JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = "HS256"
-TOKEN_HOURS = 8
+TOKEN_HOURS = 2
 
 app = FastAPI(title="FleetPulse API")
 bearer = HTTPBearer(auto_error=False)

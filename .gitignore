@@ -13,3 +13,10 @@ crash.*.log
 venv/
 __pycache__/
 *.pyc
+
+# Secrets
+.env
+*.env
+*.pem
+*.key
+*-key.json

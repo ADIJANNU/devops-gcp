@@ -1,38 +1,47 @@
 #!/bin/bash
-# Smoke test for the FleetPulse API through a temporary port-forward.
-# Exits 0 if every check passes, 1 if any fails.
-
+# Usage: SMOKE_EMAIL=... SMOKE_PASSWORD=... ./api-smoke-test.sh
 PORT=8000
 FAILED=0
 
 kubectl port-forward svc/fleetpulse-api ${PORT}:8000 >/dev/null 2>&1 &
 PF_PID=$!
 trap 'kill $PF_PID 2>/dev/null' EXIT
-
 sleep 3
 
-check() {
-  local path=$1
-  local expected=$2
+check() {  # usage: check PATH EXPECTED_CODE [TOKEN]
   local code
-  code=$(curl -s -o /dev/null -w "%{http_code}" "localhost:${PORT}${path}")
-  if [[ "$code" == "$expected" ]]; then
-    echo "[PASS] $path -> $code"
+  if [[ -n "$3" ]]; then
+    code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $3" "localhost:${PORT}$1")
   else
-    echo "[FAIL] $path -> $code (expected $expected)"
+    code=$(curl -s -o /dev/null -w "%{http_code}" "localhost:${PORT}$1")
+  fi
+  if [[ "$code" == "$2" ]]; then
+    echo "[PASS] $1 -> $code"
+  else
+    echo "[FAIL] $1 -> $code (expected $2)"
     FAILED=1
   fi
 }
 
 check /healthz 200
 check /readyz 200
-check /api/summary 200
-check /api/equipment 200
-check /api/equipment/NOPE/history 404
+check /api/summary 401
 
-if [[ $FAILED -eq 0 ]]; then
-  echo "All checks passed"
-else
-  echo "Some checks failed"
+if [[ -n "$SMOKE_EMAIL" && -n "$SMOKE_PASSWORD" ]]; then
+  TOKEN=$(curl -s -X POST "localhost:${PORT}/api/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"email\":\"$SMOKE_EMAIL\",\"password\":\"$SMOKE_PASSWORD\"}" \
+    | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))")
+  if [[ -z "$TOKEN" ]]; then
+    echo "[FAIL] login returned no token"
+    FAILED=1
+  else
+    echo "[PASS] login"
+    check /api/summary 200 "$TOKEN"
+    check /api/equipment 200 "$TOKEN"
+    check /api/equipment/NOPE/history 404 "$TOKEN"
+  fi
 fi
+
+[[ $FAILED -eq 0 ]] && echo "All checks passed" || echo "Some checks failed"
 exit $FAILED

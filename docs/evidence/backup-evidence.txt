@@ -1,0 +1,21 @@
+Backup evidence, 2026-10-30T10:35Z
+
+== Bucket contents
+    388069  2026-10-29T12:21:37Z  gs://devops-learning-505512-fleetpulse-staging-backups/staging/fleetpulse-20261029T122129Z.dump
+    388069  2026-10-30T02:00:54Z  gs://devops-learning-505512-fleetpulse-staging-backups/staging/fleetpulse-20261030T020024Z.dump
+TOTAL: 2 objects, 776138 bytes (757.95kiB)
+
+== Object metadata
+creation_time: 2026-10-30T02:00:54+0000
+md5_hash: b+hNdaWWxaEovo2PNofvqQ==
+name: staging/fleetpulse-20261030T020024Z.dump
+size: 388069
+
+== Databases after restore drill
+fleetpulse
+postgres
+template0
+template1
+
+== Roles of backup identity on bucket
+projects/devops-learning-505512/roles/fleetpulseBackupWriter

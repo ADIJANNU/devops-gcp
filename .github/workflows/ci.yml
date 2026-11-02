@@ -1,0 +1,94 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  REGISTRY: asia-south1-docker.pkg.dev/devops-learning-505512/fleetpulse-staging-images
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Secret scan (full history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependency audit
+        run: |
+          pip install pip-audit==2.7.3
+          pip-audit -r app/api-service/requirements.txt
+          pip-audit -r app/ingestion/requirements.txt
+
+      - name: Terraform security scan (report only for now)
+        run: |
+          docker run --rm -v "$PWD/terraform:/src:ro" aquasec/trivy:0.55.0 \
+            config --severity HIGH,CRITICAL --exit-code 0 /src
+
+  images:
+    needs: scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            path: app/api-service
+          - service: dashboard
+            path: app/dashboard
+          - service: ingestion
+            path: app/ingestion
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t "$REGISTRY/${{ matrix.service }}:${GITHUB_SHA::7}" "${{ matrix.path }}"
+
+      - name: Image scan (report HIGH, fail on CRITICAL)
+        run: |
+          IMAGE="$REGISTRY/${{ matrix.service }}:${GITHUB_SHA::7}"
+          SCAN="docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $HOME/.cache/trivy:/root/.cache/trivy aquasec/trivy:0.55.0"
+          $SCAN image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 0 "$IMAGE"
+          $SCAN image --severity CRITICAL --ignore-unfixed --exit-code 1 --skip-db-update "$IMAGE"
+
+      - name: Authenticate to GCP (keyless)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/39475041177/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-ci@devops-learning-505512.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Push image (commit SHA tag)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+          docker push "$REGISTRY/${{ matrix.service }}:${GITHUB_SHA::7}"

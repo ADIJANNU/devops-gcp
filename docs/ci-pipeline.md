@@ -11,3 +11,4 @@ Workload Identity Federation. No service account key exists. Provider trusts onl
 - Terraform scan is report-only.
 - Image tags are mutable in the registry (immutable tags could be enabled).
 - Deployment is not automated yet.
+- Trivy blocked the dashboard image: 3 CRITICAL findings (brotli-libs, libcrypto3, libssl3) in the nginx-unprivileged:1.27-alpine base, all with fixes available. A fresh `docker pull` did not help, because the tag's Alpine base was not rebuilt. Fixed with `apk upgrade` in the Dockerfile, then returned to the non-root user (uid 101) and verified the container serves. The OpenSSL CVE was 32-bit only, so likely not exploitable on our nodes, but fixed anyway. Trade-off: builds are no longer bit-for-bit reproducible.

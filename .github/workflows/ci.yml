@@ -23,7 +23,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -64,7 +64,7 @@ jobs:
           - service: ingestion
             path: app/ingestion
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build image
         run: docker build --pull -t "$REGISTRY/${{ matrix.service }}:${GITHUB_SHA::7}" "${{ matrix.path }}"

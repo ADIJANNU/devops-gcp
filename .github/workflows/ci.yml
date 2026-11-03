@@ -67,7 +67,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build image
-        run: docker build -t "$REGISTRY/${{ matrix.service }}:${GITHUB_SHA::7}" "${{ matrix.path }}"
+        run: docker build --pull -t "$REGISTRY/${{ matrix.service }}:${GITHUB_SHA::7}" "${{ matrix.path }}"
 
       - name: Image scan (report HIGH, fail on CRITICAL)
         run: |

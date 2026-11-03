@@ -3,4 +3,4 @@ starlette==1.10.0
 uvicorn==0.54.0
 psycopg2-binary==2.9.9
 bcrypt==4.2.0
-PyJWT==2.15.0
+PyJWT==2.15.1

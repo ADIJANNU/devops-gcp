@@ -85,7 +85,7 @@ jobs:
 
       - name: Set up gcloud
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Push image (commit SHA tag)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -111,7 +111,7 @@ jobs:
           workload_identity_provider: projects/39475041177/locations/global/workloadIdentityPools/github-pool/providers/github-provider
           service_account: github-deploy@devops-learning-505512.iam.gserviceaccount.com
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v3
         with:
           install_components: gke-gcloud-auth-plugin
 

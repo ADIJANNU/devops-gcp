@@ -2,11 +2,23 @@
 # Usage: SMOKE_EMAIL=... SMOKE_PASSWORD=... ./api-smoke-test.sh
 PORT=8000
 FAILED=0
+LOG=$(mktemp)
 
-kubectl port-forward svc/fleetpulse-api ${PORT}:8000 >/dev/null 2>&1 &
+kubectl port-forward svc/fleetpulse-api ${PORT}:8000 >"$LOG" 2>&1 &
 PF_PID=$!
 trap 'kill $PF_PID 2>/dev/null' EXIT
-sleep 3
+
+# Wait up to 30 seconds for the tunnel to accept connections
+READY=0
+for i in $(seq 1 30); do
+  if curl -s -o /dev/null -m 2 "localhost:${PORT}/healthz"; then READY=1; break; fi
+  sleep 1
+done
+if [[ $READY -eq 0 ]]; then
+  echo "[FAIL] tunnel to the API never became ready. kubectl said:"
+  cat "$LOG"
+  exit 1
+fi
 
 check() {  # usage: check PATH EXPECTED_CODE [TOKEN]
   local code

@@ -92,3 +92,51 @@ jobs:
         run: |
           gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
           docker push "$REGISTRY/${{ matrix.service }}:${GITHUB_SHA::7}"
+
+  deploy-staging:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: images
+    runs-on: ubuntu-latest
+    environment: staging
+    concurrency: deploy-staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (keyless, deploy identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/39475041177/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-deploy@devops-learning-505512.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: gke-gcloud-auth-plugin
+
+      - name: Connect kubectl to the staging cluster
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: fleetpulse-staging-cluster
+          location: asia-south1
+
+      - name: Deploy the commit's images
+        id: deploy
+        run: |
+          TAG=${GITHUB_SHA::7}
+          cd k8s/staging
+          for f in api-deployment.yaml dashboard-deployment.yaml ingestion-cronjob.yaml; do
+            sed "s/TAG_PLACEHOLDER/$TAG/" "$f" | kubectl apply -f -
+          done
+          kubectl rollout status deployment/fleetpulse-api --timeout=180s
+          kubectl rollout status deployment/fleetpulse-dashboard --timeout=180s
+
+      - name: Smoke test
+        run: bash scripts/api-smoke-test.sh
+
+      - name: Roll back on failure
+        if: failure() && steps.deploy.conclusion != 'skipped'
+        run: |
+          kubectl rollout undo deployment/fleetpulse-api
+          kubectl rollout undo deployment/fleetpulse-dashboard
